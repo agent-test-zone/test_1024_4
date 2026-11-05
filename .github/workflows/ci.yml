@@ -1,0 +1,50 @@
+# CI gates (CI-workflow), generated from the commands confirmed during onboarding.
+# One job runs every lane mapped to the current event; lane commands live in .github/ci-gates.json.
+# On pull_request the reports name the PR head commit, not GitHub's merge commit.
+name: CI
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Only pull request runs of the same branch replace each other; a push never cancels a queue or daily run.
+concurrency:
+  group: ci-gates-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    env:
+      # pull_request: report the PR head, not GitHub's merge commit.
+      CI_GATES_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # gate.mjs runs on Node 20+; the repository's own toolchains follow.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run gate lanes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/gate/gate.mjs run --event "$GITHUB_EVENT_NAME"
+
+      - name: Upload gate reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-gates-reports
+          path: gate-reports/
+          if-no-files-found: warn
+          retention-days: 30
