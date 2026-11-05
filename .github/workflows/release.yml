@@ -1,0 +1,39 @@
+# Release gate: a version tag runs the repository-configured release lane on the tagged commit.
+# Publishing packages or images is up to the repository; add those steps here when needed.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "[0-9]+.[0-9]+.[0-9]+*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # gate.mjs runs on Node 20+; the repository's own toolchains follow.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Gate lane release
+        run: node scripts/gate/gate.mjs run --lane release
+
+      - name: Upload gate reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-gates-release
+          path: gate-reports/
+          if-no-files-found: warn
+          retention-days: 30
